@@ -52,12 +52,10 @@ try {
     $RepoBase = "https://raw.githubusercontent.com/ung8850/Gwag/main"
 
     # ===== 스크립트 다운로드 =====
+    # ✅ 언어 관련 스크립트 제거
     $scripts = @(
-        "InstallLanguagePacks3.ps1",
-        "SetDefaultLang.ps1",
         "TimezoneRedirection.ps1",
         "ConfigureSessionTimeoutsV2.ps1",
-        # ✅ 추가: 첫 로그인 태그 스케줄러 설치 스크립트
         "Sysprep-OneTime.ps1"
     )
 
@@ -66,13 +64,11 @@ try {
     }
 
     # ===== 실행 =====
-    RunPs1 (Join-Path $WorkDir "InstallLanguagePacks3.ps1") '-LanguageList "Korean (Korea)"'
-    RunPs1 (Join-Path $WorkDir "SetDefaultLang.ps1")       '-Language "Korean (Korea)"'
     RunPs1 (Join-Path $WorkDir "TimezoneRedirection.ps1")
     RunPs1 (Join-Path $WorkDir "ConfigureSessionTimeoutsV2.ps1") `
         '-MaxDisconnectionTime "5" -RemoteAppLogoffTimeLimit "5" -MaxConnectionTime "5" -MaxIdleTime "5"'
 
-    # ✅ 추가: 첫 로그인 시 Rebuild 태그 찍는 스케줄러/스크립트 설치
+    # ✅ 첫 로그인 시 Rebuild 태그 찍는 스케줄러/스크립트 설치
     RunPs1 (Join-Path $WorkDir "Sysprep-OneTime.ps1")
 
     Log "=== Bootstrap success ==="
