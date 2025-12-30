@@ -65,8 +65,6 @@ function Set-SelfVmTags {
     $c = Get-ImdsComputeInfo
     $vmId = "/subscriptions/$($c.subscriptionId)/resourceGroups/$($c.resourceGroupName)/providers/Microsoft.Compute/virtualMachines/$($c.name)"
 
-    # ✅ FIX: PowerShell 문자열에서 "$vmId?api-version=..." 는 ? 때문에 파싱이 깨질 수 있음
-    #        변수 경계를 ${}로 명확히 지정해서 안전하게 만듦
     $uri  = "https://management.azure.com${vmId}?api-version=2023-03-01"
 
     $token = Get-ImdsToken -Resource "https://management.azure.com/"
@@ -134,13 +132,11 @@ try {
         }
     }
     else {
-        # selfPath를 못 잡아도, 고정 경로 파일이 이미 있으면 그대로 진행
         Log ("[FILE] Self path not resolvable. Will use fixed script if exists: {0}" -f $fixedScript)
         if (-not (Test-Path $fixedScript)) {
             throw "Cannot resolve self script path AND fixed script not found: $fixedScript"
         }
     }
-    # ---- FIX END ----
 
     $psExe = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
     $args  = "-NoProfile -ExecutionPolicy Bypass -File `"$fixedScript`" -TagOnly"
