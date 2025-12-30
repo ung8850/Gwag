@@ -1,27 +1,46 @@
+# =========================
 # Sysprep-OneTime.ps1
 # - VM 프로비저닝 시 1회 실행: Scheduled Task 생성(AtLogOn, SYSTEM, Highest)
 # - 사용자 로그온 시(=Task 실행): SystemAssigned MI(IMDS)로 자기 자신 VM에 태그 PATCH
 # - 1회 실행 후 Task 자기 삭제(OneTime)
+# =========================
+
+param(
+    [switch]$TagOnly
+)
 
 $ErrorActionPreference = "Stop"
 
 $BaseDir = "C:\ProgramData\AVD"
 $WorkDir = Join-Path $BaseDir "Bootstrap"
 $LogDir  = Join-Path $WorkDir "Logs"
-$LogFile = Join-Path $LogDir ("sysprep-onetime-{0}.log" -f (Get-Date).ToString("yyyyMMdd-HHmmss"))
 
 New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
 New-Item -ItemType Directory -Path $LogDir  -Force | Out-Null
 
+$LogFile = Join-Path $LogDir ("sysprep-onetime-{0}.log" -f (Get-Date).ToString("yyyyMMdd-HHmmss"))
 Start-Transcript -Path $LogFile -Append | Out-Null
 
 function Log([string]$msg) {
     Write-Host ("[{0}] {1}" -f (Get-Date -Format "yyyy-MM-dd HH:mm:ss"), $msg)
 }
 
-param(
-    [switch]$TagOnly
-)
+function Remove-ScheduledTaskIfExists {
+    param([Parameter(Mandatory)][string]$TaskName)
+
+    try {
+        $t = Get-ScheduledTask -TaskName $TaskName -ErrorAction SilentlyContinue
+        if ($null -ne $t) {
+            Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop
+            Log ("[TASK] Deleted existing task: {0}" -f $TaskName)
+        } else {
+            Log ("[TASK] No existing task (skip delete): {0}" -f $TaskName)
+        }
+    } catch {
+        # "없음" 케이스나 기타 잡다한 건 무시(다음 단계 진행)
+        Log ("[TASK] Delete attempt ignored: {0}" -f $_.Exception.Message)
+    }
+}
 
 function Get-ImdsToken {
     param([Parameter(Mandatory)][string]$Resource)
@@ -63,8 +82,9 @@ function Set-SelfVmTags {
 
 function Remove-ThisTask {
     param([string]$TaskName)
+
     try {
-        schtasks /Delete /TN $TaskName /F | Out-Null
+        Unregister-ScheduledTask -TaskName $TaskName -Confirm:$false -ErrorAction Stop
         Log ("[TASK] Deleted: {0}" -f $TaskName)
     } catch {
         Log ("[TASK] Delete failed (ignored): {0}" -f $_.Exception.Message)
@@ -86,7 +106,6 @@ try {
         Remove-ThisTask -TaskName $taskName
 
         Log "=== TagOnly success ==="
-        Stop-Transcript | Out-Null
         exit 0
     }
 
@@ -94,13 +113,29 @@ try {
     Log ("WorkDir: {0}" -f $WorkDir)
     Log ("Task  : {0}" -f $taskName)
 
-    schtasks /Delete /TN $taskName /F 2>$null | Out-Null
+    
+    Remove-ScheduledTaskIfExists -TaskName $taskName
 
+    
+    $fixedScript = Join-Path $WorkDir "Sysprep-OneTime.ps1"
     $selfPath = $MyInvocation.MyCommand.Path
-    if (-not (Test-Path $selfPath)) { throw "Cannot resolve self script path." }
+
+    if (-not $selfPath -or -not (Test-Path $selfPath)) {
+        throw "Cannot resolve self script path."
+    }
+
+    if ($selfPath -ne $fixedScript) {
+        Copy-Item -Path $selfPath -Destination $fixedScript -Force
+        Log ("[FILE] Copied self script to fixed path: {0}" -f $fixedScript)
+    } else {
+        Log ("[FILE] Script already in fixed path: {0}" -f $fixedScript)
+    }
 
     $psExe = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
-    $args  = "-NoProfile -ExecutionPolicy Bypass -File `"$selfPath`" -TagOnly"
+    $args  = "-NoProfile -ExecutionPolicy Bypass -File `"$fixedScript`" -TagOnly"
+
+    Log ("[TASK] PS  : {0}" -f $psExe)
+    Log ("[TASK] Arg : {0}" -f $args)
 
     $action    = New-ScheduledTaskAction -Execute $psExe -Argument $args
     $trigger   = New-ScheduledTaskTrigger -AtLogOn
@@ -111,12 +146,13 @@ try {
     Log ("Scheduled Task created successfully: {0}" -f $taskName)
     Log "=== Sysprep-OneTime (Create Scheduled Task) success ==="
 
-    Stop-Transcript | Out-Null
     exit 0
 }
 catch {
     Log "!!! Sysprep-OneTime FAILED !!!"
     Log $_.Exception.Message
-    try { Stop-Transcript | Out-Null } catch {}
     exit 1
+}
+finally {
+    try { Stop-Transcript | Out-Null } catch {}
 }
