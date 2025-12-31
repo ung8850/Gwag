@@ -3,7 +3,8 @@
 # - VM 프로비저닝 시 1회 실행: Scheduled Task 생성(AtLogOn, SYSTEM, Highest)
 # - 사용자 로그온 시(=Task 실행): SystemAssigned MI(IMDS)로 자기 자신 VM에 태그 PATCH
 # - 1회 실행 후 Task 자기 삭제(OneTime)
-# =========================
+# - TagOnly 성공 후 WorkDir 내 .ps1 전부 제거 (Logs는 유지)
+# 2025-12-31 수정
 
 param(
     [switch]$TagOnly
@@ -13,9 +14,11 @@ $ErrorActionPreference = "Stop"
 
 $BaseDir = "C:\ProgramData\AVD"
 $WorkDir = Join-Path $BaseDir "Bootstrap"
+$TmpDir  = Join-Path $WorkDir "_tmp"
 $LogDir  = Join-Path $WorkDir "Logs"
 
 New-Item -ItemType Directory -Path $WorkDir -Force | Out-Null
+New-Item -ItemType Directory -Path $TmpDir  -Force | Out-Null
 New-Item -ItemType Directory -Path $LogDir  -Force | Out-Null
 
 $LogFile = Join-Path $LogDir ("sysprep-onetime-{0}.log" -f (Get-Date).ToString("yyyyMMdd-HHmmss"))
@@ -64,7 +67,6 @@ function Set-SelfVmTags {
 
     $c = Get-ImdsComputeInfo
     $vmId = "/subscriptions/$($c.subscriptionId)/resourceGroups/$($c.resourceGroupName)/providers/Microsoft.Compute/virtualMachines/$($c.name)"
-
     $uri  = "https://management.azure.com${vmId}?api-version=2023-03-01"
 
     $token = Get-ImdsToken -Resource "https://management.azure.com/"
@@ -106,6 +108,25 @@ try {
         Set-SelfVmTags -Tags $tags
         Remove-ThisTask -TaskName $taskName
 
+        try {
+            $workPs1 = Join-Path $WorkDir "*.ps1"
+            $tmpPs1  = Join-Path $TmpDir  "*.ps1"
+
+            $cmd = @(
+                "ping 127.0.0.1 -n 6 > nul",
+                "del /f /q `"$workPs1`" 2>nul",
+                "del /f /q `"$tmpPs1`" 2>nul",
+                "rmdir /s /q `"$TmpDir`" 2>nul"
+            ) -join " & "
+
+            Start-Process -FilePath "cmd.exe" -ArgumentList "/c $cmd" -WindowStyle Hidden
+            Log ("[CLEAN] Scheduled delete: {0}" -f $workPs1)
+            Log ("[CLEAN] Scheduled delete: {0}" -f $tmpPs1)
+            Log ("[CLEAN] Scheduled rmdir : {0}" -f $TmpDir)
+        } catch {
+            Log ("[CLEAN] Schedule delete failed (ignored): {0}" -f $_.Exception.Message)
+        }
+
         Log "=== TagOnly success ==="
         exit 0
     }
@@ -118,8 +139,7 @@ try {
 
     $fixedScript = Join-Path $WorkDir "Sysprep-OneTime.ps1"
 
-    # ---- FIX: self path resolve 안정화 ----
-    # PS 5.1에서는 $PSCommandPath가 $MyInvocation.MyCommand.Path 보다 안정적
+    # self path resolve 안정화 (PS 5.1)
     $selfPath = $PSCommandPath
     if (-not $selfPath) { $selfPath = $MyInvocation.MyCommand.Path }
 
@@ -152,7 +172,6 @@ try {
 
     Log ("Scheduled Task created successfully: {0}" -f $taskName)
     Log "=== Sysprep-OneTime (Create Scheduled Task) success ==="
-
     exit 0
 }
 catch {
