@@ -94,15 +94,23 @@ function Remove-ThisTask {
     }
 }
 
-$taskName = "AVD-TagSelf-AtLogon-Once"
 
+$taskName = "AVD-TagSelf-AtLogon-Once"
 try {
     if ($TagOnly) {
         Log "=== TagOnly start ==="
 
+        $kstStr = $null
+        try {
+            $tzKst  = [TimeZoneInfo]::FindSystemTimeZoneById("Korea Standard Time")
+            $kstNow = [TimeZoneInfo]::ConvertTimeFromUtc([datetime]::UtcNow, $tzKst)
+            $kstStr = $kstNow.ToString("yyyy-MM-dd HH:mm:ss")
+        } catch {
+            $kstStr = ([datetime]::UtcNow.AddHours(9)).ToString("yyyy-MM-dd HH:mm:ss")
+        }
+
         $tags = @{
-            "Rebuild"            = "Yes"
-            "RebuildDetectedKst" = (Get-Date).ToString("yyyy-MM-dd HH:mm:ss")
+            "Rebuild" = ("Yes | {0} (KST)" -f $kstStr)
         }
 
         Set-SelfVmTags -Tags $tags
@@ -139,7 +147,6 @@ try {
 
     $fixedScript = Join-Path $WorkDir "Sysprep-OneTime.ps1"
 
-    # self path resolve 안정화 (PS 5.1)
     $selfPath = $PSCommandPath
     if (-not $selfPath) { $selfPath = $MyInvocation.MyCommand.Path }
 
@@ -150,8 +157,7 @@ try {
         } else {
             Log ("[FILE] Script already in fixed path: {0}" -f $fixedScript)
         }
-    }
-    else {
+    } else {
         Log ("[FILE] Self path not resolvable. Will use fixed script if exists: {0}" -f $fixedScript)
         if (-not (Test-Path $fixedScript)) {
             throw "Cannot resolve self script path AND fixed script not found: $fixedScript"

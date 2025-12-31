@@ -1,4 +1,4 @@
-#2025-12-31수정
+# 2025-12-31 수정 v2 - Bootstrap Script 
 
 $ErrorActionPreference = "Stop"
 
@@ -34,7 +34,8 @@ function RunPs1($path) {
     Log ("Run: {0}" -f $path)
 
     $arg = "-NoProfile -ExecutionPolicy Bypass -File `"$path`""
-    $p = Start-Process powershell -ArgumentList $arg -Wait -PassThru -NoNewWindow
+    $psExe = "$env:SystemRoot\System32\WindowsPowerShell\v1.0\powershell.exe"
+    $p = Start-Process $psExe -ArgumentList $arg -Wait -PassThru -NoNewWindow
 
     if ($p.ExitCode -ne 0) {
         throw ("Script failed: {0} (ExitCode={1})" -f $path, $p.ExitCode)
@@ -59,7 +60,6 @@ try {
     Download ("{0}/{1}" -f $RepoBase, $scriptName) $tempPath
     RunPs1 $tempPath
 
-   
     try {
         Remove-Item -Path $tempPath -Force -ErrorAction Stop
         Log ("[CLEAN] Deleted temp script: {0}" -f $tempPath)
