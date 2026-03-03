@@ -1,0 +1,850 @@
+{
+  "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+  "contentVersion": "1.0.0.0",
+  "parameters": {
+    "artifactsLocation": {
+      "type": "string",
+      "metadata": {
+        "description": "The base URI where artifacts required by this template are located."
+      }
+    },
+    "vmNameList": {
+      "type": "array",
+      "defaultValue": [],
+      "metadata": {
+        "description": "Optional. Explicit VM names to create. If empty, uses rdshPrefix + (vmInitialNumber + copyIndex)."
+      }
+    },
+    "availabilityOption": {
+      "type": "string",
+      "metadata": {
+        "description": "The availability option for the VMs."
+      },
+      "defaultValue": "None",
+      "allowedValues": [
+        "None",
+        "AvailabilitySet",
+        "AvailabilityZone"
+      ]
+    },
+    "availabilitySetName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of avaiability set to be used when create the VMs."
+      },
+      "defaultValue": ""
+    },
+    "availabilityZones": {
+      "type": "array",
+      "metadata": {
+        "description": "The availability zones to equally distribute VMs amongst"
+      },
+      "defaultValue": []
+    },
+    "vmGalleryImageOffer": {
+      "type": "string",
+      "metadata": {
+        "description": "(Required when vmImageType = Gallery) Gallery image Offer."
+      },
+      "defaultValue": ""
+    },
+    "vmGalleryImagePublisher": {
+      "type": "string",
+      "metadata": {
+        "description": "(Required when vmImageType = Gallery) Gallery image Publisher."
+      },
+      "defaultValue": ""
+    },
+    "vmGalleryImageHasPlan": {
+      "type": "bool",
+      "metadata": {
+        "description": "Whether the VM image has a plan or not"
+      },
+      "defaultValue": false
+    },
+    "vmGalleryImageSKU": {
+      "type": "string",
+      "metadata": {
+        "description": "(Required when vmImageType = Gallery) Gallery image SKU."
+      },
+      "defaultValue": ""
+    },
+    "vmGalleryImageVersion": {
+      "type": "string",
+      "metadata": {
+        "description": "(Required when vmImageType = Gallery) Gallery image version."
+      },
+      "defaultValue": ""
+    },
+    "rdshPrefix": {
+      "type": "string",
+      "metadata": {
+        "description": "This prefix will be used in combination with the VM number to create the VM name. This value includes the dash, so if using “rdsh” as the prefix, VMs would be named “rdsh-0”, “rdsh-1”, etc. You should use a unique prefix to reduce name collisions in Active Directory."
+      },
+      "defaultValue": "[take(toLower(resourceGroup().name),10)]"
+    },
+    "rdshNumberOfInstances": {
+      "type": "int",
+      "metadata": {
+        "description": "Number of session hosts that will be created and added to the hostpool."
+      }
+    },
+    "rdshVMDiskType": {
+      "type": "string",
+      "allowedValues": [
+        "Premium_LRS",
+        "StandardSSD_LRS",
+        "Standard_LRS"
+      ],
+      "metadata": {
+        "description": "The VM disk type for the VM: HDD or SSD."
+      }
+    },
+    "rdshVmSize": {
+      "type": "string",
+      "metadata": {
+        "description": "The size of the session host VMs."
+      },
+      "defaultValue": "Standard_A2"
+    },
+    "rdshVmDiskSizeGB": {
+      "type": "int",
+      "metadata": {
+        "description": "The size of the disk on the vm in GB"
+      },
+      "defaultValue": 0
+    },
+    "rdshHibernate": {
+      "type": "bool",
+      "metadata": {
+        "description": "Whether or not the VM is hibernate enabled"
+      },
+      "defaultValue": false
+    },
+    "enableAcceleratedNetworking": {
+      "type": "bool",
+      "metadata": {
+        "description": "Enables Accelerated Networking feature, notice that VM size must support it, this is supported in most of general purpose and compute-optimized instances with 2 or more vCPUs, on instances that supports hyperthreading it is required minimum of 4 vCPUs."
+      },
+      "defaultValue": false
+    },
+    "administratorAccountUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "The username for the domain admin."
+      }
+    },
+    "administratorAccountPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The password that corresponds to the existing domain username."
+      }
+    },
+    "vmAdministratorAccountUsername": {
+      "type": "string",
+      "metadata": {
+        "description": "A username to be used as the virtual machine administrator account. The vmAdministratorAccountUsername and  vmAdministratorAccountPassword parameters must both be provided. Otherwise, domain administrator credentials provided by administratorAccountUsername and administratorAccountPassword will be used."
+      },
+      "defaultValue": ""
+    },
+    "vmAdministratorAccountPassword": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The password associated with the virtual machine administrator account. The vmAdministratorAccountUsername and  vmAdministratorAccountPassword parameters must both be provided. Otherwise, domain administrator credentials provided by administratorAccountUsername and administratorAccountPassword will be used."
+      },
+      "defaultValue": ""
+    },
+    "vhds": {
+      "type": "string",
+      "metadata": {
+        "description": "The URL to store unmanaged disks."
+      }
+    },
+    "subnet-id": {
+      "type": "string",
+      "metadata": {
+        "description": "The unique id of the subnet for the nics."
+      }
+    },
+    "loadBalancerBackendPoolId": {
+      "type": "string",
+      "metadata": {
+        "description": "The unique id of the load balancer backend pool id for the nics."
+      },
+      "defaultValue": ""
+    },
+    "rdshImageSourceId": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Resource ID of the image."
+      }
+    },
+    "location": {
+      "type": "string",
+      "defaultValue": "",
+      "metadata": {
+        "description": "Location for all resources to be created in."
+      }
+    },
+    "extendedLocation": {
+      "type": "object",
+      "metadata": {
+        "description": "The EdgeZone extended location of the session host VMs."
+      },
+      "defaultValue": {}
+    },
+    "createNetworkSecurityGroup": {
+      "type": "bool",
+      "metadata": {
+        "description": "Whether to create a new network security group or use an existing one"
+      },
+      "defaultValue": false
+    },
+    "networkSecurityGroupId": {
+      "type": "string",
+      "metadata": {
+        "description": "The resource id of an existing network security group"
+      },
+      "defaultValue": ""
+    },
+    "networkSecurityGroupRules": {
+      "type": "array",
+      "metadata": {
+        "description": "The rules to be given to the new network security group"
+      },
+      "defaultValue": []
+    },
+    "networkInterfaceTags": {
+      "type": "object",
+      "metadata": {
+        "description": "The tags to be assigned to the network interfaces"
+      },
+      "defaultValue": {}
+    },
+    "networkSecurityGroupTags": {
+      "type": "object",
+      "metadata": {
+        "description": "The tags to be assigned to the network security groups"
+      },
+      "defaultValue": {}
+    },
+    "virtualMachineTags": {
+      "type": "object",
+      "metadata": {
+        "description": "The tags to be assigned to the virtual machines"
+      },
+      "defaultValue": {}
+    },
+    "imageTags": {
+      "type": "object",
+      "metadata": {
+        "description": "The tags to be assigned to the images"
+      },
+      "defaultValue": {}
+    },
+    "vmInitialNumber": {
+      "type": "int",
+      "metadata": {
+        "description": "VM name prefix initial number."
+      },
+      "defaultValue": 0
+    },
+    "_guidValue": {
+      "type": "string",
+      "defaultValue": "[newGuid()]"
+    },
+    "hostpoolToken": {
+      "type": "securestring",
+      "metadata": {
+        "description": "The token for adding VMs to the hostpool"
+      }
+    },
+    "hostpoolName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the hostpool"
+      }
+    },
+    "ouPath": {
+      "type": "string",
+      "metadata": {
+        "description": "OUPath for the domain join"
+      },
+      "defaultValue": ""
+    },
+    "domain": {
+      "type": "string",
+      "metadata": {
+        "description": "Domain to join"
+      },
+      "defaultValue": ""
+    },
+    "aadJoin": {
+      "type": "bool",
+      "metadata": {
+        "description": "IMPORTANT: You can use this parameter for the test purpose only as AAD Join is public preview. True if AAD Join, false if AD join"
+      },
+      "defaultValue": false
+    },
+    "intune": {
+      "type": "bool",
+      "metadata": {
+        "description": "IMPORTANT: Please don't use this parameter as intune enrollment is not supported yet. True if intune enrollment is selected.  False otherwise"
+      },
+      "defaultValue": false
+    },
+    "bootDiagnostics": {
+      "type": "object",
+      "metadata": {
+        "description": "Boot diagnostics object taken as body of Diagnostics Profile in VM creation"
+      },
+      "defaultValue": {
+        "enabled": false
+      }
+    },
+    "userAssignedIdentity": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of user assigned identity that will assigned to the VMs. This is an optional parameter."
+      },
+      "defaultValue": ""
+    },
+    "customConfigurationScriptUrl": {
+      "type": "string",
+      "metadata": {
+        "description": "The PowerShell script URL to be run as part of post update custom configuration"
+      },
+      "defaultValue": ""
+    },
+    "SessionHostConfigurationVersion": {
+      "type": "string",
+      "metadata": {
+        "description": "Session host configuration version of the host pool."
+      },
+      "defaultValue": ""
+    },
+    "systemData": {
+      "type": "object",
+      "metadata": {
+        "description": "System data is used for internal purposes, such as support preview features."
+      },
+      "defaultValue": {}
+    },
+    "securityType": {
+      "type": "string",
+      "metadata": {
+        "description": "Specifies the SecurityType of the virtual machine. It is set as TrustedLaunch to enable UefiSettings. Default: UefiSettings will not be enabled unless this property is set as TrustedLaunch."
+      },
+      "defaultValue": "Standard",
+      "allowedValues": [
+        "Standard",
+        "TrustedLaunch",
+        "ConfidentialVM"
+      ]
+    },
+    "secureBoot": {
+      "type": "bool",
+      "metadata": {
+        "description": "Specifies whether secure boot should be enabled on the virtual machine."
+      },
+      "defaultValue": false
+    },
+    "vTPM": {
+      "type": "bool",
+      "metadata": {
+        "description": "Specifies whether vTPM (Virtual Trusted Platform Module) should be enabled on the virtual machine."
+      },
+      "defaultValue": false
+    },
+    "integrityMonitoring": {
+      "type": "bool",
+      "metadata": {
+        "description": "Specifies whether integrity monitoring will be added to the virtual machine."
+      },
+      "defaultValue": false
+    },
+    "managedDiskSecurityEncryptionType": {
+      "type": "string",
+      "defaultValue": "VMGuestStateOnly",
+      "allowedValues": [
+        "VMGuestStateOnly",
+        "DiskWithVMGuestState"
+      ],
+      "metadata": {
+        "description": "Managed disk security encryption type."
+      }
+    },
+    "lbTemplateUri": {
+      "type": "string",
+      "metadata": {
+        "description": "Load balancer template uri."
+      }
+    },
+    "isNewLoadBalancer": {
+      "type": "bool",
+      "metadata": {
+        "description": "Whether to create load balancer"
+      },
+      "defaultValue": false
+    },
+    "loadBalancerName": {
+      "type": "string",
+      "metadata": {
+        "description": "The name of the load balancer to be created."
+      }
+    },
+    "frontendIpConfigName": {
+      "type": "string",
+      "metadata": {
+        "description": "Frontend ip config name of the load balancer to be created."
+      },
+      "defaultValue": ""
+    },
+    "backendPoolName": {
+      "type": "string",
+      "metadata": {
+        "description": "backendPool Name of the load balancer to be created."
+      }
+    },
+    "isNewBackendPool": {
+      "type": "bool",
+      "metadata": {
+        "description": "Whether to create backendpool"
+      },
+      "defaultValue": false
+    },
+    "updatedLoadBalancer": {
+      "type": "object",
+      "metadata": {
+        "description": "The updated load balancer when create a new backend pool."
+      },
+      "defaultValue": {}
+    },
+    "outboundRuleName": {
+      "type": "string",
+      "metadata": {
+        "description": "Outbound rule name of load balancer"
+      }
+    },
+    "enableTcpReset": {
+      "type": "bool",
+      "metadata": {
+        "description": "Whether to disable tcp reset for outbound rule of the load balancer"
+      }
+    },
+    "outboundRuleIdleTimeoutInMinutes": {
+      "type": "int",
+      "metadata": {
+        "description": "Idle timeout in minutes for load balancer rules config"
+      }
+    },
+    "outboundRuleProtocol": {
+      "type": "string",
+      "metadata": {
+        "description": "Protocol for outbound rule config"
+      }
+    },
+    "allocatedOutboundPorts": {
+      "type": "int",
+      "metadata": {
+        "description": "Allocated outbound ports count for load balancer rules config"
+      }
+    }
+  },
+  "variables": {
+    "effectiveCount": "[if(greater(length(parameters('vmNameList')), 0), length(parameters('vmNameList')), parameters('rdshNumberOfInstances'))]",
+    "effectiveVmName": "[if(greater(length(parameters('vmNameList')), 0), parameters('vmNameList')[copyIndex()], concat(parameters('rdshPrefix'), add(copyIndex(), parameters('vmInitialNumber'))))]",
+    "emptyArray": [],
+    "domain": "[if(equals(parameters('domain'), ''), last(split(parameters('administratorAccountUsername'), '@')), parameters('domain'))]",
+    "storageAccountType": "[parameters('rdshVMDiskType')]",
+    "newNsgName": "[concat(parameters('rdshPrefix'), 'nsg-', parameters('_guidValue'))]",
+    "newNsgDeploymentName": "[concat('NSG-linkedTemplate-', parameters('_guidValue'))]",
+    "nsgId": "[if(parameters('createNetworkSecurityGroup'), resourceId('Microsoft.Network/networkSecurityGroups', variables('newNsgName')), parameters('networkSecurityGroupId'))]",
+    "isVMAdminAccountCredentialsProvided": "[and(not(equals(parameters('vmAdministratorAccountUsername'), '')), not(equals(parameters('vmAdministratorAccountPassword'), '')))]",
+    "vmAdministratorUsername": "[if(variables('isVMAdminAccountCredentialsProvided'), parameters('vmAdministratorAccountUsername'), first(split(parameters('administratorAccountUsername'), '@')))]",
+    "vmAdministratorPassword": "[if(variables('isVMAdminAccountCredentialsProvided'), parameters('vmAdministratorAccountPassword'), parameters('administratorAccountPassword'))]",
+    "vmAvailabilitySetResourceId": {
+      "id": "[resourceId('Microsoft.Compute/availabilitySets/', parameters('availabilitySetName'))]"
+    },
+    "planInfoEmpty": "[or(empty(parameters('vmGalleryImageSKU')), empty(parameters('vmGalleryImagePublisher')), empty(parameters('vmGalleryImageOffer')))]",
+    "marketplacePlan": {
+      "name": "[parameters('vmGalleryImageSKU')]",
+      "publisher": "[parameters('vmGalleryImagePublisher')]",
+      "product": "[parameters('vmGalleryImageOffer')]",
+      "version": "[if(empty(parameters('vmGalleryImageVersion')), 'latest', parameters('vmGalleryImageVersion'))]"
+    },
+    "vmPlan": "[if(or(variables('planInfoEmpty'), not(parameters('vmGalleryImageHasPlan'))), json('null'), variables('marketplacePlan'))]",
+    "vmIdentityType": "[if(parameters('aadJoin'), if(not(empty(parameters('userAssignedIdentity'))), 'SystemAssigned, UserAssigned', 'SystemAssigned'), if(not(empty(parameters('userAssignedIdentity'))), 'UserAssigned', 'None'))]",
+    "vmIdentityTypeProperty": {
+      "type": "[variables('vmIdentityType')]"
+    },
+    "vmUserAssignedIdentityProperty": {
+      "userAssignedIdentities": {
+        "[resourceID('Microsoft.ManagedIdentity/userAssignedIdentities/',parameters('userAssignedIdentity'))]": {}
+      }
+    },
+    "vmIdentity": "[if(not(empty(parameters('userAssignedIdentity'))), union(variables('vmIdentityTypeProperty'), variables('vmUserAssignedIdentityProperty')), variables('vmIdentityTypeProperty'))]",
+    "powerShellScriptName": "[if(empty(parameters('customConfigurationScriptUrl')), null(), last(split(parameters('customConfigurationScriptUrl'), '/')))]",
+    "securityProfile": {
+      "uefiSettings": {
+        "secureBootEnabled": "[parameters('secureBoot')]",
+        "vTpmEnabled": "[parameters('vTPM')]"
+      },
+      "securityType": "[parameters('securityType')]"
+    },
+    "managedDiskSecurityProfile": {
+      "securityEncryptionType": "[parameters('managedDiskSecurityEncryptionType')]"
+    },
+    "countOfSelectedAZ": "[length(parameters('availabilityZones'))]",
+    "newBackendPoolId": "[if(parameters('isNewLoadBalancer'), resourceId('Microsoft.Network/loadBalancers/backendAddressPools', parameters('loadBalancerName'), parameters('backendPoolName')), '' )]",
+    "loadBalancerBackendPoolId": "[if(empty(parameters('loadBalancerBackendPoolId')), variables('newBackendPoolId'), parameters('loadBalancerBackendPoolId') )]",
+    "loadBalancerBackendPoolIdArray": [
+      {
+        "id": "[variables('loadBalancerBackendPoolId')]"
+      }
+    ],
+    "loadBalancerBackendAddressPools": "[if(empty(variables('loadBalancerBackendPoolId')), json('null'), variables('loadBalancerBackendPoolIdArray'))]",
+    "updateLoadBalancer": "[and(not(parameters('isNewLoadBalancer')), parameters('isNewBackendPool'))]"
+  },
+  "resources": [
+    {
+      "apiVersion": "2018-05-01",
+      "name": "[variables('newNsgDeploymentName')]",
+      "type": "Microsoft.Resources/deployments",
+      "properties": {
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "resources": [
+            {
+              "condition": "[parameters('createNetworkSecurityGroup')]",
+              "type": "Microsoft.Network/networkSecurityGroups",
+              "apiVersion": "2019-02-01",
+              "name": "[variables('newNsgName')]",
+              "location": "[parameters('location')]",
+              "tags": "[parameters('networkSecurityGroupTags')]",
+              "properties": {
+                "securityRules": "[parameters('networkSecurityGroupRules')]"
+              }
+            }
+          ]
+        }
+      }
+    },
+    {
+      "apiVersion": "2022-11-01",
+      "type": "Microsoft.Network/networkInterfaces",
+      "name": "[concat(variables('effectiveVmName'), '-nic')]",
+      "location": "[parameters('location')]",
+      "extendedLocation": "[if(empty(parameters('extendedLocation')), null(), parameters('extendedLocation'))]",
+      "tags": "[parameters('networkInterfaceTags')]",
+      "copy": {
+        "name": "rdsh-nic-loop",
+        "count": "[variables('effectiveCount')]"
+      },
+      "properties": {
+        "ipConfigurations": [
+          {
+            "name": "ipconfig",
+            "properties": {
+              "privateIPAllocationMethod": "Dynamic",
+              "subnet": {
+                "id": "[parameters('subnet-id')]"
+              },
+              "loadBalancerBackendAddressPools": "[variables('loadBalancerBackendAddressPools')]"
+            }
+          }
+        ],
+        "enableAcceleratedNetworking": "[parameters('enableAcceleratedNetworking')]",
+        "networkSecurityGroup": "[if(empty(parameters('networkSecurityGroupId')), json('null'), json(concat('{\"id\": \"', variables('nsgId'), '\"}')))]"
+      },
+      "dependsOn": [
+        "[variables('newNsgDeploymentName')]",
+        "[concat('loadBalancerCreation-', parameters('_guidValue'))]",
+        "[concat('loadBalancerUpdate-', parameters('_guidValue'))]"
+      ]
+    },
+    {
+      "apiVersion": "2022-11-01",
+      "type": "Microsoft.Compute/virtualMachines",
+      "name": "[variables('effectiveVmName')]",
+      "location": "[parameters('location')]",
+      "extendedLocation": "[if(empty(parameters('extendedLocation')), null(), parameters('extendedLocation'))]",
+      "tags": "[parameters('virtualMachineTags')]",
+      "plan": "[variables('vmPlan')]",
+      "copy": {
+        "name": "rdsh-vm-loop",
+        "count": "[variables('effectiveCount')]"
+      },
+      "dependsOn": [
+        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('effectiveVmName'), '-nic'))]"
+      ],
+      "identity": "[variables('vmIdentity')]",
+      "properties": {
+        "hardwareProfile": {
+          "vmSize": "[parameters('rdshVmSize')]"
+        },
+        "availabilitySet": "[if(equals(parameters('availabilityOption'), 'AvailabilitySet'), variables('vmAvailabilitySetResourceId'), json('null'))]",
+        "osProfile": {
+          "computerName": "[variables('effectiveVmName')]",
+          "adminUsername": "[variables('vmAdministratorUsername')]",
+          "adminPassword": "[variables('vmAdministratorPassword')]"
+        },
+        "securityProfile": "[if(or(equals(parameters('securityType'), 'TrustedLaunch'), equals(parameters('securityType'), 'ConfidentialVM')), variables('securityProfile'), json('null'))]",
+        "storageProfile": {
+          "osDisk": {
+            "createOption": "FromImage",
+            "managedDisk": {
+              "storageAccountType": "[variables('storageAccountType')]",
+              "securityProfile": "[if(equals(parameters('securityType'), 'ConfidentialVM'), variables('managedDiskSecurityProfile'), json('null'))]"
+            }
+          },
+          "imageReference": {
+            "id": "[parameters('rdshImageSourceId')]"
+          }
+        },
+        "networkProfile": {
+          "networkInterfaces": [
+            {
+              "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('effectiveVmName'), '-nic'))]"
+            }
+          ]
+        },
+        "diagnosticsProfile": {
+          "bootDiagnostics": "[parameters('bootDiagnostics')]"
+        },
+        "additionalCapabilities": {
+          "hibernationEnabled": "[parameters('rdshHibernate')]"
+        },
+        "licenseType": "Windows_Client"
+      },
+      "zones": "[if(equals(parameters('availabilityOption'), 'AvailabilityZone'), array(parameters('availabilityZones')[mod(copyIndex('rdsh-vm-loop'),variables('countOfSelectedAZ'))]), variables('emptyArray'))]"
+    },
+    {
+      "name": "[concat(variables('effectiveVmName'), '/GuestAttestation')]",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "apiVersion": "2018-10-01",
+      "location": "[parameters('location')]",
+      "condition": "[parameters('integrityMonitoring')]",
+      "copy": {
+        "name": "rdsh-guest-attestation-loop",
+        "count": "[variables('effectiveCount')]"
+      },
+      "properties": {
+        "publisher": "Microsoft.Azure.Security.WindowsAttestation",
+        "type": "GuestAttestation",
+        "typeHandlerVersion": "1.0",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "AttestationConfig": {
+            "MaaSettings": {
+              "maaEndpoint": "",
+              "maaTenantName": "GuestAttestation"
+            },
+            "AscSettings": {
+              "ascReportingEndpoint": "",
+              "ascReportingFrequency": ""
+            },
+            "useCustomToken": "false",
+            "disableAlerts": "false"
+          }
+        }
+      },
+      "dependsOn": [
+        "rdsh-vm-loop"
+      ]
+    },
+    {
+      "apiVersion": "2021-07-01",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(variables('effectiveVmName'), '/', 'Microsoft.PowerShell.DSC')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "rdsh-guest-attestation-loop"
+      ],
+      "copy": {
+        "name": "rdsh-dsc-loop",
+        "count": "[variables('effectiveCount')]"
+      },
+      "properties": {
+        "publisher": "Microsoft.Powershell",
+        "type": "DSC",
+        "typeHandlerVersion": "2.73",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "modulesUrl": "[parameters('artifactsLocation')]",
+          "configurationFunction": "Configuration.ps1\\AddSessionHost",
+          "properties": {
+            "hostPoolName": "[parameters('hostpoolName')]",
+            "registrationInfoTokenCredential": {
+              "UserName": "PLACEHOLDER_DO_NOT_USE",
+              "Password": "PrivateSettingsRef:RegistrationInfoToken"
+            },
+            "aadJoin": "[parameters('aadJoin')]",
+            "UseAgentDownloadEndpoint": true,
+            "aadJoinPreview": "[and(contains(parameters('systemData'), 'aadJoinPreview'), parameters('systemData').aadJoinPreview)]",
+            "mdmId": "[if(parameters('intune'), '0000000a-0000-0000-c000-000000000000', '')]",
+            "sessionHostConfigurationLastUpdateTime": "[parameters('SessionHostConfigurationVersion')]"
+          }
+        },
+        "protectedSettings": {
+          "Items": {
+            "registrationInfoToken": "[parameters('hostpoolToken')]"
+          }
+        }
+      }
+    },
+    {
+      "condition": "[and(parameters('aadJoin'), if(contains(parameters('systemData'), 'aadJoinPreview'), not(parameters('systemData').aadJoinPreview), bool('true')))]",
+      "apiVersion": "2021-07-01",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(variables('effectiveVmName'), '/', 'AADLoginForWindows')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "rdsh-dsc-loop"
+      ],
+      "copy": {
+        "name": "rdsh-aad-join-loop",
+        "count": "[variables('effectiveCount')]"
+      },
+      "properties": {
+        "publisher": "Microsoft.Azure.ActiveDirectory",
+        "type": "AADLoginForWindows",
+        "typeHandlerVersion": "2.0",
+        "autoUpgradeMinorVersion": true,
+        "settings": "[if(parameters('intune'), createObject('mdmId','0000000a-0000-0000-c000-000000000000'), json('null'))]"
+      }
+    },
+    {
+      "condition": "[not(parameters('aadJoin'))]",
+      "apiVersion": "2021-07-01",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(variables('effectiveVmName'), '/', 'joindomain')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "rdsh-dsc-loop"
+      ],
+      "copy": {
+        "name": "rdsh-domain-join-loop",
+        "count": "[variables('effectiveCount')]"
+      },
+      "properties": {
+        "publisher": "Microsoft.Compute",
+        "type": "JsonADDomainExtension",
+        "typeHandlerVersion": "1.3",
+        "autoUpgradeMinorVersion": true,
+        "settings": {
+          "name": "[variables('domain')]",
+          "ouPath": "[parameters('ouPath')]",
+          "user": "[parameters('administratorAccountUsername')]",
+          "restart": "true",
+          "options": "3"
+        },
+        "protectedSettings": {
+          "password": "[parameters('administratorAccountPassword')]"
+        }
+      }
+    },
+    {
+      "condition": "[not(empty(parameters('customConfigurationScriptUrl')))]",
+      "apiVersion": "2021-03-01",
+      "type": "Microsoft.Compute/virtualMachines/extensions",
+      "name": "[concat(variables('effectiveVmName'), '/', 'Microsoft.Compute.CustomScriptExtension')]",
+      "location": "[parameters('location')]",
+      "dependsOn": [
+        "rdsh-dsc-loop",
+        "rdsh-aad-join-loop",
+        "rdsh-domain-join-loop"
+      ],
+      "copy": {
+        "name": "post-update-custom-configuration-loop",
+        "count": "[variables('effectiveCount')]"
+      },
+      "properties": {
+        "publisher": "Microsoft.Compute",
+        "type": "CustomScriptExtension",
+        "typeHandlerVersion": "1.10",
+        "autoUpgradeMinorVersion": true,
+        "protectedSettings": {
+          "fileUris": [
+            "[parameters('customConfigurationScriptUrl')]"
+          ],
+          "commandToExecute": "[format('powershell -ExecutionPolicy Unrestricted -File {0}', variables('powerShellScriptName'))]"
+        }
+      }
+    },
+    {
+      "apiVersion": "2018-05-01",
+      "name": "[concat('loadBalancerCreation-', parameters('_guidValue'))]",
+      "type": "Microsoft.Resources/deployments",
+      "condition": "[parameters('isNewLoadBalancer')]",
+      "resourceGroup": "[resourceGroup().name]",
+      "dependsOn": [],
+      "properties": {
+        "mode": "Incremental",
+        "templateLink": {
+          "uri": "[parameters('lbTemplateUri')]",
+          "contentVersion": "1.0.0.0"
+        },
+        "parameters": {
+          "loadBalancerName": {
+            "value": "[parameters('loadBalancerName')]"
+          },
+          "location": {
+            "value": "[parameters('location')]"
+          },
+          "frontendIpConfigName": {
+            "value": "[parameters('frontendIpConfigName')]"
+          },
+          "backendPoolName": {
+            "value": "[parameters('backendPoolName')]"
+          },
+          "extendedLocation": {
+            "value": "[parameters('extendedLocation')]"
+          },
+          "availabilityZones": {
+            "value": "[parameters('availabilityZones')]"
+          },
+          "outboundRuleName": {
+            "value": "[parameters('outboundRuleName')]"
+          },
+          "enableTcpReset": {
+            "value": "[parameters('enableTcpReset')]"
+          },
+          "outboundRuleIdleTimeoutInMinutes": {
+            "value": "[parameters('outboundRuleIdleTimeoutInMinutes')]"
+          },
+          "outboundRuleProtocol": {
+            "value": "[parameters('outboundRuleProtocol')]"
+          },
+          "allocatedOutboundPorts": {
+            "value": "[parameters('allocatedOutboundPorts')]"
+          }
+        }
+      }
+    },
+    {
+      "apiVersion": "2018-05-01",
+      "name": "[concat('loadBalancerUpdate-', parameters('_guidValue'))]",
+      "type": "Microsoft.Resources/deployments",
+      "resourceGroup": "[resourceGroup().name]",
+      "condition": "[variables('updateLoadBalancer')]",
+      "properties": {
+        "mode": "Incremental",
+        "template": {
+          "$schema": "https://schema.management.azure.com/schemas/2019-04-01/deploymentTemplate.json#",
+          "contentVersion": "1.0.0.0",
+          "parameters": {},
+          "variables": {},
+          "resources": [
+            "[parameters('updatedLoadBalancer')]"
+          ],
+          "outputs": {}
+        }
+      }
+    }
+  ],
+  "outputs": {}
+}
