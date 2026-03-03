@@ -454,7 +454,6 @@
   },
   "variables": {
     "effectiveCount": "[if(greater(length(parameters('vmNameList')), 0), length(parameters('vmNameList')), parameters('rdshNumberOfInstances'))]",
-    "effectiveVmName": "[if(greater(length(parameters('vmNameList')), 0), parameters('vmNameList')[copyIndex()], concat(parameters('rdshPrefix'), add(copyIndex(), parameters('vmInitialNumber'))))]",
     "emptyArray": [],
     "domain": "[if(equals(parameters('domain'), ''), last(split(parameters('administratorAccountUsername'), '@')), parameters('domain'))]",
     "storageAccountType": "[parameters('rdshVMDiskType')]",
@@ -536,7 +535,7 @@
     {
       "apiVersion": "2022-11-01",
       "type": "Microsoft.Network/networkInterfaces",
-      "name": "[concat(variables('effectiveVmName'), '-nic')]",
+      "name": "[concat(if(greater(length(parameters('vmNameList')), 0), parameters('vmNameList')[copyIndex('rdsh-nic-loop')], concat(parameters('rdshPrefix'), add(copyIndex('rdsh-nic-loop'), parameters('vmInitialNumber')))), '-nic')]",
       "location": "[parameters('location')]",
       "extendedLocation": "[if(empty(parameters('extendedLocation')), null(), parameters('extendedLocation'))]",
       "tags": "[parameters('networkInterfaceTags')]",
@@ -570,7 +569,7 @@
     {
       "apiVersion": "2022-11-01",
       "type": "Microsoft.Compute/virtualMachines",
-      "name": "[variables('effectiveVmName')]",
+      "name": "[if(greater(length(parameters('vmNameList')), 0), parameters('vmNameList')[copyIndex('rdsh-vm-loop')], concat(parameters('rdshPrefix'), add(copyIndex('rdsh-vm-loop'), parameters('vmInitialNumber'))))]",
       "location": "[parameters('location')]",
       "extendedLocation": "[if(empty(parameters('extendedLocation')), null(), parameters('extendedLocation'))]",
       "tags": "[parameters('virtualMachineTags')]",
@@ -580,7 +579,7 @@
         "count": "[variables('effectiveCount')]"
       },
       "dependsOn": [
-        "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('effectiveVmName'), '-nic'))]"
+                  "[resourceId('Microsoft.Network/networkInterfaces', concat(if(greater(length(parameters('vmNameList')), 0), parameters('vmNameList')[copyIndex('rdsh-nic-loop')], concat(parameters('rdshPrefix'), add(copyIndex('rdsh-nic-loop'), parameters('vmInitialNumber')))), '-nic'))]"
       ],
       "identity": "[variables('vmIdentity')]",
       "properties": {
@@ -589,7 +588,7 @@
         },
         "availabilitySet": "[if(equals(parameters('availabilityOption'), 'AvailabilitySet'), variables('vmAvailabilitySetResourceId'), json('null'))]",
         "osProfile": {
-          "computerName": "[variables('effectiveVmName')]",
+          "computerName": "[if(greater(length(parameters('vmNameList')), 0), parameters('vmNameList')[copyIndex('rdsh-vm-loop')], concat(parameters('rdshPrefix'), add(copyIndex('rdsh-vm-loop'), parameters('vmInitialNumber'))))]",
           "adminUsername": "[variables('vmAdministratorUsername')]",
           "adminPassword": "[variables('vmAdministratorPassword')]"
         },
@@ -612,10 +611,10 @@
         },
         "networkProfile": {
           "networkInterfaces": [
-            {
-              "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(variables('effectiveVmName'), '-nic'))]"
-            }
-          ]
+          {
+    "id": "[resourceId('Microsoft.Network/networkInterfaces', concat(if(greater(length(parameters('vmNameList')), 0), parameters('vmNameList')[copyIndex('rdsh-vm-loop')], concat(parameters('rdshPrefix'), add(copyIndex('rdsh-vm-loop'), parameters('vmInitialNumber')))), '-nic'))]"
+          }
+        ]
         },
         "diagnosticsProfile": {
           "bootDiagnostics": "[parameters('bootDiagnostics')]"
@@ -629,7 +628,7 @@
     },
 
     {
-      "name": "[concat(variables('effectiveVmName'), '/GuestAttestation')]",
+      "name": "[concat(if(greater(length(parameters('vmNameList')), 0), parameters('vmNameList')[copyIndex('rdsh-guest-attestation-loop')], concat(parameters('rdshPrefix'), add(copyIndex('rdsh-guest-attestation-loop'), parameters('vmInitialNumber')))), '/GuestAttestation')]",
       "type": "Microsoft.Compute/virtualMachines/extensions",
       "apiVersion": "2018-10-01",
       "location": "[parameters('location')]",
@@ -666,7 +665,7 @@
     {
       "apiVersion": "2021-07-01",
       "type": "Microsoft.Compute/virtualMachines/extensions",
-      "name": "[concat(variables('effectiveVmName'), '/', 'Microsoft.PowerShell.DSC')]",
+      "name": "[concat(if(greater(length(parameters('vmNameList')), 0), parameters('vmNameList')[copyIndex('rdsh-dsc-loop')], concat(parameters('rdshPrefix'), add(copyIndex('rdsh-dsc-loop'), parameters('vmInitialNumber')))), '/', 'Microsoft.PowerShell.DSC')]",
       "location": "[parameters('location')]",
       "dependsOn": [
         "rdsh-guest-attestation-loop"
@@ -708,7 +707,7 @@
       "condition": "[and(parameters('aadJoin'), if(contains(parameters('systemData'), 'aadJoinPreview'), not(parameters('systemData').aadJoinPreview), bool('true')))]",
       "apiVersion": "2021-07-01",
       "type": "Microsoft.Compute/virtualMachines/extensions",
-      "name": "[concat(variables('effectiveVmName'), '/', 'AADLoginForWindows')]",
+      "name": "[concat(if(greater(length(parameters('vmNameList')), 0), parameters('vmNameList')[copyIndex('rdsh-aad-join-loop')], concat(parameters('rdshPrefix'), add(copyIndex('rdsh-aad-join-loop'), parameters('vmInitialNumber')))), '/', 'AADLoginForWindows')]",
       "location": "[parameters('location')]",
       "dependsOn": [
         "rdsh-dsc-loop"
@@ -730,7 +729,7 @@
       "condition": "[not(parameters('aadJoin'))]",
       "apiVersion": "2021-07-01",
       "type": "Microsoft.Compute/virtualMachines/extensions",
-      "name": "[concat(variables('effectiveVmName'), '/', 'joindomain')]",
+      "name": "[concat(if(greater(length(parameters('vmNameList')), 0), parameters('vmNameList')[copyIndex('rdsh-domain-join-loop')], concat(parameters('rdshPrefix'), add(copyIndex('rdsh-domain-join-loop'), parameters('vmInitialNumber')))), '/', 'joindomain')]",
       "location": "[parameters('location')]",
       "dependsOn": [
         "rdsh-dsc-loop"
@@ -761,7 +760,7 @@
       "condition": "[not(empty(parameters('customConfigurationScriptUrl')))]",
       "apiVersion": "2021-03-01",
       "type": "Microsoft.Compute/virtualMachines/extensions",
-      "name": "[concat(variables('effectiveVmName'), '/', 'Microsoft.Compute.CustomScriptExtension')]",
+      "name": "[concat(if(greater(length(parameters('vmNameList')), 0), parameters('vmNameList')[copyIndex('post-update-custom-configuration-loop')], concat(parameters('rdshPrefix'), add(copyIndex('post-update-custom-configuration-loop'), parameters('vmInitialNumber')))), '/', 'Microsoft.Compute.CustomScriptExtension')]",
       "location": "[parameters('location')]",
       "dependsOn": [
         "rdsh-dsc-loop",
