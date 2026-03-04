@@ -121,10 +121,11 @@ try {
             $tmpPs1  = Join-Path $TmpDir  "*.ps1"
 
             $cmd = @(
-                "ping 127.0.0.1 -n 6 > nul",
-                "del /f /q `"$workPs1`" 2>nul",
-                "del /f /q `"$tmpPs1`" 2>nul",
-                "rmdir /s /q `"$TmpDir`" 2>nul"
+            "ping 127.0.0.1 -n 6 > nul",
+            "del /f /q `"$workPs1`" 2>nul",
+            "del /f /q `"$tmpPs1`" 2>nul",
+            "rmdir /s /q `"$TmpDir`" 2>nul",
+            "rmdir /s /q `"C:\ProgramData\MDE`" 2>nul"
             ) -join " & "
 
             Start-Process -FilePath "cmd.exe" -ArgumentList "/c $cmd" -WindowStyle Hidden
