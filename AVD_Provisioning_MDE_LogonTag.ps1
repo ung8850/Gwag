@@ -3,8 +3,6 @@
 #  - AVD Custom Script Extension에서 이 Bootstrap.ps1만 실행하면,
 #    (1) MDE 온보딩(Streamlined ZIP 패키지 다운로드→압축해제→VDI PS1 실행→CMD 자동 실행)
 #    (2) 최초 사용자 로그온 1회 태깅 스크립트(FirstLogon-Tag.ps1) 실행(= Scheduled Task 생성)
-#  - MDE가 실패하더라도 태깅 스크립트는 "반드시" 실행합니다.
-#  - 최종 종료 코드는 MDE/태깅 결과에 따라 실패(Exit 1)로 반환할 수 있습니다.
 
 $ErrorActionPreference = "Stop"
 
@@ -12,10 +10,10 @@ $ErrorActionPreference = "Stop"
 # [필수 설정] Blob URL (SAS 포함)
 # ---------------------------------------------------------------------
 
-# 1) FirstLogon-Tag.ps1 다운로드 URL (기존 그대로)
+# 1) FirstLogon-Tag.ps1 다운로드 URL
 $TagScriptUrl = "https://hanmiavdstorage.blob.core.windows.net/hanmi-avd/AVD-Template/ProvisioningCustomURL/FirstLogon-Tag.ps1?sp=r&st=2026-03-04T06:11:19Z&se=2027-01-01T14:26:19Z&spr=https&sv=2024-11-04&sr=b&sig=eb71hp0ASJOQihiA8CQatcxQVIFwnMlOCjKPa14Z%2Fog%3D"
 
-# 2) MDE Streamlined 패키지 ZIP 다운로드 URL (SAS 포함)  <<<<< 여기만 너가 채우면 됨
+# 2) MDE Streamlined 패키지 ZIP 다운로드 URL (SAS 포함)
 $MdeZipUrl = "https://hanmiavdstorage.blob.core.windows.net/hanmi-avd/AVD-Template/ProvisioningCustomURL/GatewayWindowsDefenderATPOnboardingPackage.zip?sp=r&st=2026-03-04T06:10:56Z&se=2027-01-01T14:25:56Z&spr=https&sv=2024-11-04&sr=b&sig=m3O3Za%2BbC0r9PxAbevExRc1VZk1mQvtcX6dL%2BzTbvRw%3D"
 
 # ---------------------------------------------------------------------
@@ -88,9 +86,8 @@ function Cleanup-TempFile($tempPath) {
 function Invoke-MDE-VDI-FromZip {
     $ErrorActionPreference = "Stop"
 
-    # 고정 설치/캐시 위치(원하면 바꿔도 됨)
     $MdeRoot = "C:\ProgramData\MDE"
-    $MdePkgDir = Join-Path $MdeRoot "Streamlined"   # 여기로 항상 풀어서 최신 유지
+    $MdePkgDir = Join-Path $MdeRoot "Streamlined" 
 
     function Write-Log([string]$msg) {
         $ts = Get-Date -Format "yyyy-MM-dd HH:mm:ss"
@@ -112,7 +109,7 @@ function Invoke-MDE-VDI-FromZip {
         Write-Log "Downloading MDE zip to: $zipPath"
         Download $MdeZipUrl $zipPath
 
-        # 2) 대상 폴더 준비(매번 최신으로 교체)
+        # 2) 대상 폴더 준비
         New-Item -ItemType Directory -Path $MdePkgDir -Force | Out-Null
         try {
             Remove-Item -Path (Join-Path $MdePkgDir "*") -Recurse -Force -ErrorAction SilentlyContinue
@@ -124,7 +121,7 @@ function Invoke-MDE-VDI-FromZip {
         # ZIP 정리
         Cleanup-TempFile $zipPath
 
-        # 3) ZIP 구조가 루트/하위폴더 어떤 형태든 PS1 위치 탐색
+        # 3) ZIP 구조가 루트/하위폴더 PS1 위치 탐색
         $ps1Item = Get-ChildItem -Path $MdePkgDir -Recurse -File -Filter "Onboard-NonPersistentMachine.ps1" | Select-Object -First 1
         if (-not $ps1Item) {
             Write-Log "ERROR: Onboard-NonPersistentMachine.ps1 not found after unzip"
@@ -143,7 +140,7 @@ function Invoke-MDE-VDI-FromZip {
             return 43
         }
 
-        # 4) PS1 실행 (중요: onboardingPackageLocation = pkgDir)
+        # 4) PS1 실행
         Write-Log "Executing VDI onboarding PS1 (it will call CMD automatically)..."
         $args = @(
             "-NoProfile",
@@ -172,7 +169,7 @@ try {
     Log ("MdeZipUrl    : {0}" -f $MdeZipUrl)
 
     # -------------------------
-    # STEP 1) MDE 온보딩 실행 (실패해도 STEP2는 반드시 수행)
+    # STEP 1) MDE 온보딩 실행
     # -------------------------
     $mdeExit = 0
     try {
@@ -185,7 +182,7 @@ try {
     }
 
     # -------------------------
-    # STEP 2) 태그 스크립트(= Scheduled Task 생성) 실행 (기존 그대로)
+    # STEP 2) 태그 스크립트(= Scheduled Task 생성) 실행
     # -------------------------
     Log "=== FirstLogon-Tag script (Create Task) start ==="
 
@@ -199,7 +196,7 @@ try {
 
     Cleanup-TempFile $tempPath
 
-    # tmp 폴더 정리(기존 그대로)
+    # tmp 폴더 정리
     try {
         if (Test-Path $TmpDir) {
             $left = Get-ChildItem -Path $TmpDir -Force -ErrorAction SilentlyContinue
@@ -212,12 +209,7 @@ try {
         Log ("[CLEAN] Tmp dir delete failed (ignored): {0}" -f $_.Exception.Message)
     }
 
-    # -------------------------
-    # 종료 정책(기존 유지)
-    #  - Tag 실패: 실패(Exit 1)
-    #  - Tag 성공 + MDE 실패: 실패(Exit 1)
-    #  - 둘 다 성공: Exit 0
-    # -------------------------
+    # 종료 정책
     if ($tagExit -ne 0) {
         throw ("FirstLogon-Tag script failed (ExitCode={0})" -f $tagExit)
     }
@@ -235,4 +227,5 @@ catch {
     Log $_.Exception.Message
     try { Stop-Transcript | Out-Null } catch {}
     exit 1
+
 }
