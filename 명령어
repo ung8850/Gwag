@@ -1,0 +1,5 @@
+sudo log stream \
+--info \
+--debug \
+--style compact \
+--predicate 'process CONTAINS[c] "HIWARE" OR process CONTAINS[c] "PSMProxy" OR process == "tccd" OR process == "appleeventsd" OR process == "nesessionmanager" OR process == "neagent" OR eventMessage CONTAINS[c] "netand" OR eventMessage CONTAINS[c] "xfreerdp"'
