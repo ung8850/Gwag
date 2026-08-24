@@ -1,0 +1,5 @@
+sudo log stream \
+--info \
+--debug \
+--style compact \
+--predicate 'process CONTAINS[c] "PSMProxy" OR eventMessage CONTAINS[c] "PSMProxy" OR eventMessage CONTAINS[c] "startProxy" OR eventMessage CONTAINS[c] "TransparentProxy"'
